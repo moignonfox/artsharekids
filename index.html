@@ -18,7 +18,7 @@
       folder:       "mur-dessins",
     },
     supabase: {
-      url:    "https://nycrcqlyatxcpahworfi.supabase.co",
+      url:    "https://nycrcqlyatxcpahworfi.supabase.co",   // ← ex: https://xxxx.supabase.co
       anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55Y3JjcWx5YXR4Y3BhaHdvcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTc2OTksImV4cCI6MjA5Nzc5MzY5OX0.62HnTnEzhBsVmIHXOqqOJj3vOsIuap8ILblwsGza42Y", // ← clé publique anon
       table:  "drawings",
     },
@@ -36,6 +36,13 @@
         color:    "#8338EC",
         bg:       "#F3E8FF",
         adminPwd: "violet2024",   // ← change ce mot de passe !
+      },
+      "NEIGE": {
+        name:     "British school",
+        emoji:    "❄️",
+        color:    "#8338EC",
+        bg:       "#F3E8FF",
+        adminPwd: "lune2024",   // ← change ce mot de passe !
       },
     }
   };
@@ -301,7 +308,14 @@ select.field-input { cursor: pointer; }
 /* ═══════════════════════════════════════
    ÉCRAN 3A — ADMIN ÉCOLE
 ═══════════════════════════════════════ */
-#s-admin, #s-visitor { flex-direction: column; min-height: 100vh; }
+#s-admin { display: none; flex-direction: column; min-height: 100vh; }
+#s-admin.active { display: flex; }
+
+/* ═══════════════════════════════════════
+   ÉCRAN 3B — MUR VISITEUR
+═══════════════════════════════════════ */
+#s-visitor { display: none; flex-direction: column; min-height: 100vh; }
+#s-visitor.active { display: flex; }
 
 /* ── HEADER COMMUN ── */
 .page-header {
@@ -519,6 +533,55 @@ select.field-input { cursor: pointer; }
   .home-card h1 { font-size: 1.6rem; }
 }
 
+/* ── BOUTONS TÉLÉCHARGEMENT ── */
+.dl-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0;
+  transition: opacity .2s;
+  padding: 0 .2rem;
+  line-height: 1;
+}
+.drawing-card:hover .dl-btn { opacity: 1; }
+
+.btn-dl-all {
+  background: #1A1A2E;
+  color: #fff;
+  font-size: .82rem;
+  padding: .4rem .9rem;
+  border-radius: var(--rs);
+  border: none;
+  font-family: var(--font);
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  transition: background .15s, transform .15s;
+}
+.btn-dl-all:hover { background: #333; transform: scale(1.03); }
+.btn-dl-all:disabled { opacity: .55; cursor: wait; }
+
+/* ── LIGHTBOX avec bouton DL ── */
+#lightbox-dl {
+  position: absolute;
+  bottom: 1.2rem; right: 1.2rem;
+  background: rgba(255,255,255,.18);
+  border: 1.5px solid rgba(255,255,255,.35);
+  color: #fff;
+  font-family: var(--font);
+  font-size: .88rem;
+  font-weight: 700;
+  padding: .45rem .9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background .15s;
+}
+#lightbox-dl:hover { background: rgba(255,255,255,.3); }
+
 /* ── SHAKE ── */
 @keyframes shake {
   0%,100%{transform:translateX(0)}
@@ -527,6 +590,7 @@ select.field-input { cursor: pointer; }
 }
 .shake { animation: shake .3s ease; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -609,7 +673,7 @@ select.field-input { cursor: pointer; }
 <!-- ═══════════════════════════════════════════
      ÉCRAN 3A — ESPACE ADMIN ÉCOLE
 ═══════════════════════════════════════════ -->
-<div id="s-admin" class="screen">
+<div id="s-admin">
   <div class="page-header">
     <div class="school-badge">
       <div class="dot" id="admin-dot"></div>
@@ -618,6 +682,7 @@ select.field-input { cursor: pointer; }
     </div>
     <div class="header-right">
       <span class="badge-role admin">✏️ Admin</span>
+      <button class="btn-dl-all" id="admin-dl-all-btn" onclick="downloadAll()" title="Télécharger tous les dessins en ZIP">⬇️ Tout télécharger</button>
       <button class="btn btn-outline" style="padding:.4rem .9rem;font-size:.82rem;" onclick="logout()">Quitter</button>
     </div>
   </div>
@@ -657,7 +722,7 @@ select.field-input { cursor: pointer; }
 <!-- ═══════════════════════════════════════════
      ÉCRAN 3B — VUE VISITEUR (lecture seule)
 ═══════════════════════════════════════════ -->
-<div id="s-visitor" class="screen">
+<div id="s-visitor">
   <div class="visitor-banner" id="visitor-banner">
     👀 Tu explores en mode visiteur — les dessins ne peuvent pas être modifiés.
   </div>
@@ -670,6 +735,7 @@ select.field-input { cursor: pointer; }
     </div>
     <div class="header-right">
       <span class="badge-role visitor">👀 Visiteur</span>
+      <button class="btn-dl-all" id="visitor-dl-all-btn" onclick="downloadAll()" title="Télécharger tous les dessins en ZIP">⬇️ Tout télécharger</button>
       <button class="btn btn-outline" style="padding:.4rem .9rem;font-size:.82rem;" onclick="logout()">Quitter</button>
     </div>
   </div>
@@ -689,6 +755,7 @@ select.field-input { cursor: pointer; }
 <div id="lightbox" onclick="closeLightbox()">
   <button class="close-lb" onclick="closeLightbox()">✕</button>
   <img id="lightbox-img" src="" alt="Dessin agrandi" />
+  <button id="lightbox-dl" onclick="event.stopPropagation(); downloadSingle(document.getElementById('lightbox-img').src)">⬇️ Télécharger</button>
 </div>
 
 <!-- NOTIFICATION -->
@@ -759,17 +826,25 @@ async function sbDelete(id) {
 /* ═══════════ NAVIGATION ═══════════ */
 function goto(screenId) {
   document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-  if (screenId) document.getElementById(screenId)?.classList.add('active');
+  document.getElementById(screenId)?.classList.add('active');
+}
+
+function showPage(pageId) {
+  ['s-admin','s-visitor'].forEach(id => {
+    document.getElementById(id).classList.remove('active');
+  });
+  document.getElementById(pageId).classList.add('active');
 }
 
 function logout() {
-  sessionStorage.removeItem('mur_session');
   currentSchool = selectedSchool = null;
   isAdmin = false; visitorPrenom = "";
   document.getElementById('admin-pwd').value = '';
   document.getElementById('admin-pwd-err').textContent = '';
   document.getElementById('visitor-name').value = '';
   document.getElementById('visitor-err').textContent = '';
+  ['s-admin','s-visitor'].forEach(id =>
+    document.getElementById(id).classList.remove('active'));
   goto('s-home');
 }
 
@@ -831,8 +906,8 @@ function adminLogin() {
   document.getElementById('admin-name').textContent = school.name;
   document.getElementById('s-admin').style.background = school.bg;
 
-  saveSession();
-  goto('s-admin');
+  goto('');       // désactive les .screen
+  showPage('s-admin');
   sbFetch(currentSchool).then(() => renderAdmin());
 }
 
@@ -864,8 +939,8 @@ function visitorLogin() {
   document.getElementById('visitor-banner').textContent =
     `👋 Bonjour ${name} ! Tu explores les dessins de ${school.name}.`;
 
-  saveSession();
-  goto('s-visitor');
+  goto('');
+  showPage('s-visitor');
   document.getElementById('visitor-grid').innerHTML =
     `<div class="empty-state"><span class="e-emoji">⏳</span><p>Chargement des dessins…</p></div>`;
   sbFetch(currentSchool).then(() => renderVisitor());
@@ -976,8 +1051,12 @@ function renderAdmin() {
            onclick="openLightbox('${d.url}')" />
       <div class="card-footer">
         📅 ${d.date}
-        <button class="del-btn" title="Supprimer"
-                onclick="deleteDrawing('${d.id}')">🗑️</button>
+        <span style="display:flex;gap:.3rem;align-items:center;">
+          <button class="dl-btn" title="Télécharger"
+                  onclick="event.stopPropagation();downloadSingle('${d.url}')">⬇️</button>
+          <button class="del-btn" title="Supprimer"
+                  onclick="deleteDrawing('${d.id}')">🗑️</button>
+        </span>
       </div>
     </div>
   `).join('');
@@ -1002,7 +1081,11 @@ function renderVisitor() {
     <div class="drawing-card" style="animation-delay:${i * .04}s"
          onclick="openLightbox('${d.url}')">
       <img src="${d.url}" alt="Dessin" loading="lazy" />
-      <div class="card-footer">📅 ${d.date}</div>
+      <div class="card-footer">
+        📅 ${d.date}
+        <button class="dl-btn" title="Télécharger"
+                onclick="event.stopPropagation();downloadSingle('${d.url}')">⬇️</button>
+      </div>
     </div>
   `).join('');
 }
@@ -1025,51 +1108,73 @@ function showNotif(msg) {
   setTimeout(() => el.classList.remove('show'), 2600);
 }
 
+/* ═══════════ TÉLÉCHARGEMENT ═══════════ */
+
+// Télécharger une seule image
+async function downloadSingle(url) {
+  try {
+    // Cloudinary : forcer le téléchargement via fl_attachment
+    const dlUrl = url.includes('cloudinary.com')
+      ? url.replace('/upload/', '/upload/fl_attachment/')
+      : url;
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = 'dessin_' + Date.now() + '.jpg';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotif('⬇️ Téléchargement lancé !');
+  } catch(e) {
+    showNotif('❌ Impossible de télécharger.');
+  }
+}
+
+// Télécharger tous les dessins en ZIP
+async function downloadAll() {
+  const list = drawings[currentSchool] || [];
+  if (list.length === 0) { showNotif('🖌️ Pas de dessins à télécharger.'); return; }
+
+  const btnAdmin   = document.getElementById('admin-dl-all-btn');
+  const btnVisitor = document.getElementById('visitor-dl-all-btn');
+  [btnAdmin, btnVisitor].forEach(b => { if(b) { b.disabled = true; b.textContent = '⏳ Préparation…'; } });
+  showNotif(`📦 Création du ZIP (${list.length} dessins)…`);
+
+  try {
+    const zip = new JSZip();
+    const school = CONFIG.schools[currentSchool];
+    const folder = zip.folder(`dessins_${school.name.replace(/\s+/g,'_')}`);
+
+    await Promise.all(list.map(async (d, i) => {
+      try {
+        const res = await fetch(d.url);
+        const blob = await res.blob();
+        const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+        folder.file(`dessin_${String(i+1).padStart(3,'0')}.${ext}`, blob);
+      } catch { /* ignorer les images inaccessibles */ }
+    }));
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = `dessins_${school.name.replace(/\s+/g,'_')}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    showNotif(`✅ ZIP téléchargé (${list.length} dessins) !`);
+  } catch(e) {
+    showNotif('❌ Erreur lors de la création du ZIP.');
+    console.error(e);
+  } finally {
+    [btnAdmin, btnVisitor].forEach(b => { if(b) { b.disabled = false; b.textContent = '⬇️ Tout télécharger'; } });
+  }
+}
+
 /* ═══════════ UTILS ═══════════ */
 function todayStr() {
   return new Date().toLocaleDateString('fr-FR');
 }
-
-/* ═══════════ SESSION (survive le rechargement) ═══════════ */
-function saveSession() {
-  sessionStorage.setItem('mur_session', JSON.stringify({
-    currentSchool, isAdmin, visitorPrenom
-  }));
-}
-
-function restoreSession() {
-  try {
-    const s = JSON.parse(sessionStorage.getItem('mur_session') || 'null');
-    if (!s || !s.currentSchool || !CONFIG.schools[s.currentSchool]) return;
-
-    currentSchool = s.currentSchool;
-    isAdmin       = s.isAdmin;
-    visitorPrenom = s.visitorPrenom || "";
-    const school  = CONFIG.schools[currentSchool];
-
-    if (isAdmin) {
-      document.getElementById('admin-dot').style.background  = school.color;
-      document.getElementById('admin-emoji').textContent     = school.emoji;
-      document.getElementById('admin-name').textContent      = school.name;
-      document.getElementById('s-admin').style.background    = school.bg;
-      goto('s-admin');
-      sbFetch(currentSchool).then(() => renderAdmin());
-    } else {
-      document.getElementById('visitor-dot').style.background       = school.color;
-      document.getElementById('visitor-emoji-badge').textContent    = school.emoji;
-      document.getElementById('visitor-name-badge').textContent     = school.name;
-      document.getElementById('s-visitor').style.background         = school.bg;
-      document.getElementById('visitor-banner').textContent =
-        `👋 Bonjour ${visitorPrenom} ! Tu explores les dessins de ${school.name}.`;
-      goto('s-visitor');
-      document.getElementById('visitor-grid').innerHTML =
-        `<div class="empty-state"><span class="e-emoji">⏳</span><p>Chargement des dessins…</p></div>`;
-      sbFetch(currentSchool).then(() => renderVisitor());
-    }
-  } catch(e) { /* pas de session, rien à faire */ }
-}
-
-restoreSession();
 </script>
 </body>
 </html>
