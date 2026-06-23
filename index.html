@@ -498,6 +498,13 @@ select.field-input { cursor: pointer; }
   box-shadow: 0 20px 60px rgba(0,0,0,.6);
   pointer-events: none;
 }
+/* à 90°/270°, l'image pivotée doit respecter les limites inversées
+   pour ne pas déborder de l'écran */
+#lightbox img.rot-90,
+#lightbox img.rot-270 {
+  max-width: 88vh;
+  max-height: 92vw;
+}
 .close-lb {
   position: absolute; top: 1rem; right: 1.2rem;
   background: rgba(255,255,255,.15);
@@ -527,10 +534,66 @@ select.field-input { cursor: pointer; }
 #notif.show { transform: translateX(-50%) translateY(0); }
 
 /* ── RESPONSIVE ── */
+
+/* Tablette / petit desktop */
+@media (max-width: 768px) {
+  .drawing-grid { grid-template-columns: repeat(3,1fr); }
+  .upload-zone, .wall-section { padding-left: 1rem; padding-right: 1rem; }
+}
+
+/* Téléphone */
+@media (max-width: 600px) {
+  .page-header {
+    flex-wrap: wrap;
+    padding: .8rem 1rem;
+    gap: .6rem;
+  }
+  .header-right {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .school-badge { font-size: 1rem; }
+  .school-badge span#admin-name,
+  .school-badge span#visitor-name-badge {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-card { padding: 2.2rem 1.5rem 2rem; }
+  .card { padding: 2rem 1.4rem; }
+
+  .drawing-grid { grid-template-columns: repeat(2,1fr); gap: .8rem; }
+
+  .drop-area { padding: 1.6rem 1rem; }
+
+  .btn-dl-all { font-size: .76rem; padding: .35rem .7rem; }
+  .btn-dl-all span.dl-label { display: none; } /* l'icône suffit sur mobile */
+
+  #lightbox img { max-width: 94vw; max-height: 78vh; }
+  #lightbox-dl { bottom: .8rem; right: .8rem; font-size: .8rem; padding: .4rem .75rem; }
+  #lightbox-rotate { bottom: .8rem; left: .8rem; }
+}
+
+/* Très petit téléphone */
 @media (max-width: 480px) {
   .path-grid { grid-template-columns: 1fr; }
-  .drawing-grid { grid-template-columns: repeat(2,1fr); }
+  .drawing-grid { grid-template-columns: repeat(2,1fr); gap: .6rem; }
   .home-card h1 { font-size: 1.6rem; }
+  .card h2 { font-size: 1.4rem; }
+  .field-input { font-size: .95rem; }
+}
+
+/* Très petite hauteur (paysage téléphone) */
+@media (max-height: 480px) and (orientation: landscape) {
+  #s-home, #s-school-login, #s-visitor-login {
+    min-height: auto;
+    padding: 1.2rem;
+  }
+  #lightbox img { max-height: 82vh; }
 }
 
 /* ── BOUTONS TÉLÉCHARGEMENT ── */
@@ -581,6 +644,48 @@ select.field-input { cursor: pointer; }
   transition: background .15s;
 }
 #lightbox-dl:hover { background: rgba(255,255,255,.3); }
+
+/* ── ROTATION DES IMAGES ── */
+.drawing-card img,
+#lightbox-img {
+  --rot: 0deg;
+  transform: rotate(var(--rot));
+  transition: transform .25s ease;
+}
+
+.rotate-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0;
+  transition: opacity .2s;
+  padding: 0 .2rem;
+  line-height: 1;
+}
+.drawing-card:hover .rotate-btn { opacity: 1; }
+
+/* sur mobile/tactile, pas de :hover fiable → toujours visibles */
+@media (hover: none) {
+  .dl-btn, .del-btn, .rotate-btn { opacity: 1; }
+}
+
+#lightbox-rotate {
+  position: absolute;
+  bottom: 1.2rem; left: 1.2rem;
+  background: rgba(255,255,255,.18);
+  border: 1.5px solid rgba(255,255,255,.35);
+  color: #fff;
+  font-family: var(--font);
+  font-size: .88rem;
+  font-weight: 700;
+  padding: .45rem .9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background .15s;
+}
+#lightbox-rotate:hover { background: rgba(255,255,255,.3); }
 
 /* ── SHAKE ── */
 @keyframes shake {
@@ -755,6 +860,8 @@ select.field-input { cursor: pointer; }
 <div id="lightbox" onclick="closeLightbox()">
   <button class="close-lb" onclick="closeLightbox()">✕</button>
   <img id="lightbox-img" src="" alt="Dessin agrandi" />
+  <button id="lightbox-rotate" title="Faire pivoter"
+          onclick="event.stopPropagation(); rotateLightbox()">↻ Pivoter</button>
   <button id="lightbox-dl" onclick="event.stopPropagation(); downloadSingle(document.getElementById('lightbox-img').src)">⬇️ Télécharger</button>
 </div>
 
@@ -1047,11 +1154,13 @@ function renderAdmin() {
 
   grid.innerHTML = list.map((d, i) => `
     <div class="drawing-card" style="animation-delay:${i * .04}s">
-      <img src="${d.url}" alt="Dessin" loading="lazy"
-           onclick="openLightbox('${d.url}')" />
+      <img src="${d.url}" alt="Dessin" loading="lazy" style="--rot:${getRotation(d.id)}deg"
+           onclick="openLightbox('${d.url}', '${d.id}')" />
       <div class="card-footer">
         📅 ${d.date}
         <span style="display:flex;gap:.3rem;align-items:center;">
+          <button class="rotate-btn" title="Faire pivoter"
+                  onclick="event.stopPropagation();rotateImage('${d.id}', this.closest('.drawing-card').querySelector('img'))">↻</button>
           <button class="dl-btn" title="Télécharger"
                   onclick="event.stopPropagation();downloadSingle('${d.url}')">⬇️</button>
           <button class="del-btn" title="Supprimer"
@@ -1079,20 +1188,57 @@ function renderVisitor() {
 
   grid.innerHTML = list.map((d, i) => `
     <div class="drawing-card" style="animation-delay:${i * .04}s"
-         onclick="openLightbox('${d.url}')">
-      <img src="${d.url}" alt="Dessin" loading="lazy" />
+         onclick="openLightbox('${d.url}', '${d.id}')">
+      <img src="${d.url}" alt="Dessin" loading="lazy" style="--rot:${getRotation(d.id)}deg" />
       <div class="card-footer">
         📅 ${d.date}
-        <button class="dl-btn" title="Télécharger"
-                onclick="event.stopPropagation();downloadSingle('${d.url}')">⬇️</button>
+        <span style="display:flex;gap:.3rem;align-items:center;">
+          <button class="rotate-btn" title="Faire pivoter"
+                  onclick="event.stopPropagation();rotateImage('${d.id}', this.closest('.drawing-card').querySelector('img'))">↻</button>
+          <button class="dl-btn" title="Télécharger"
+                  onclick="event.stopPropagation();downloadSingle('${d.url}')">⬇️</button>
+        </span>
       </div>
     </div>
   `).join('');
 }
 
+/* ═══════════ ROTATION DES IMAGES ═══════════ */
+// Stocke la rotation courante (0/90/180/270) par identifiant de dessin, en mémoire (session)
+let rotations = {};
+let lightboxCurrentId = null;
+
+function rotKey(idOrUrl) { return String(idOrUrl); }
+
+function getRotation(idOrUrl) {
+  return rotations[rotKey(idOrUrl)] || 0;
+}
+
+function applyRotationToEl(imgEl, deg) {
+  imgEl.style.setProperty('--rot', deg + 'deg');
+  imgEl.classList.toggle('rot-90', deg === 90);
+  imgEl.classList.toggle('rot-270', deg === 270);
+}
+
+function rotateImage(idOrUrl, imgEl) {
+  const key = rotKey(idOrUrl);
+  const next = (getRotation(key) + 90) % 360;
+  rotations[key] = next;
+  if (imgEl) applyRotationToEl(imgEl, next);
+}
+
+function rotateLightbox() {
+  if (lightboxCurrentId == null) return;
+  const img = document.getElementById('lightbox-img');
+  rotateImage(lightboxCurrentId, img);
+}
+
 /* ═══════════ LIGHTBOX ═══════════ */
-function openLightbox(url) {
-  document.getElementById('lightbox-img').src = url;
+function openLightbox(url, id) {
+  const img = document.getElementById('lightbox-img');
+  img.src = url;
+  lightboxCurrentId = (id !== undefined && id !== null) ? id : url;
+  applyRotationToEl(img, getRotation(lightboxCurrentId));
   document.getElementById('lightbox').classList.add('open');
 }
 function closeLightbox() {
