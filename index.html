@@ -17,6 +17,11 @@
       uploadPreset: "mur_dessins",
       folder:       "mur-dessins",
     },
+    supabase: {
+      url:    "https://nycrcqlyatxcpahworfi.supabase.co/rest/v1/drawings",   // ← ex: https://xxxx.supabase.co
+      anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55Y3JjcWx5YXR4Y3BhaHdvcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTc2OTksImV4cCI6MjA5Nzc5MzY5OX0.62HnTnEzhBsVmIHXOqqOJj3vOsIuap8ILblwsGza42Y", // ← clé publique anon
+      table:  "drawings",
+    },
     schools: {
       "TOURNESOLS": {
         name:     "École des Tournesols",
@@ -698,17 +703,65 @@ select.field-input { cursor: pointer; }
 
 <script>
 /* ═══════════ ÉTAT ═══════════ */
-let currentSchool  = null;   // code école courant
-let selectedSchool = null;   // code choisi à l'étape 1 admin
+let currentSchool  = null;
+let selectedSchool = null;
 let isAdmin        = false;
 let visitorPrenom  = "";
-let drawings = {};
+let drawings = {};   // cache local { schoolCode: [{url, date, id}] }
 
-const STORAGE_KEY = "mur_dessins";
+/* ═══════════ SUPABASE HELPERS ═══════════ */
+const SB = CONFIG.supabase;
+const sbHeaders = {
+  "Content-Type": "application/json",
+  "apikey": SB.anonKey,
+  "Authorization": "Bearer " + SB.anonKey,
+};
 
-drawings = JSON.parse(
-  localStorage.getItem(STORAGE_KEY) || "{}"
-);// { schoolCode: [{url, date, id}] }
+async function sbFetch(schoolCode) {
+  try {
+    const res = await fetch(
+      `${SB.url}/rest/v1/${SB.table}?school=eq.${schoolCode}&order=created_at.desc`,
+      { headers: sbHeaders }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    const rows = await res.json();
+    drawings[schoolCode] = rows.map(r => ({ url: r.url, date: r.date, id: r.id }));
+  } catch(e) {
+    console.error("Supabase fetch error:", e);
+    drawings[schoolCode] = drawings[schoolCode] || [];
+  }
+}
+
+async function sbInsert(schoolCode, drawing) {
+  try {
+    const res = await fetch(
+      `${SB.url}/rest/v1/${SB.table}`,
+      {
+        method: "POST",
+        headers: { ...sbHeaders, "Prefer": "return=representation" },
+        body: JSON.stringify({ school: schoolCode, url: drawing.url, date: drawing.date })
+      }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    const [row] = await res.json();
+    return row.id;
+  } catch(e) {
+    console.error("Supabase insert error:", e);
+    return null;
+  }
+}
+
+async function sbDelete(id) {
+  try {
+    const res = await fetch(
+      `${SB.url}/rest/v1/${SB.table}?id=eq.${id}`,
+      { method: "DELETE", headers: sbHeaders }
+    );
+    if (!res.ok) throw new Error(await res.text());
+  } catch(e) {
+    console.error("Supabase delete error:", e);
+  }
+}
 
 /* ═══════════ NAVIGATION ═══════════ */
 function goto(screenId) {
@@ -795,7 +848,7 @@ function adminLogin() {
 
   goto('');       // désactive les .screen
   showPage('s-admin');
-  renderAdmin();
+  sbFetch(currentSchool).then(() => renderAdmin());
 }
 
 document.getElementById('admin-pwd').addEventListener('keydown', e => {
@@ -828,7 +881,9 @@ function visitorLogin() {
 
   goto('');
   showPage('s-visitor');
-  renderVisitor();
+  document.getElementById('visitor-grid').innerHTML =
+    `<div class="empty-state"><span class="e-emoji">⏳</span><p>Chargement des dessins…</p></div>`;
+  sbFetch(currentSchool).then(() => renderVisitor());
 }
 
 document.getElementById('visitor-name').addEventListener('keydown', e => {
@@ -897,27 +952,20 @@ async function handleFiles(files) {
 }
 
 /* ═══════════ GESTION DES DESSINS ═══════════ */
-function addDrawing(d) {
-   if (!drawings[currentSchool]) drawings[currentSchool] = [];
+async function addDrawing(d) {
+  if (!drawings[currentSchool]) drawings[currentSchool] = [];
+
+  // Sauvegarder dans Supabase et récupérer l'id réel
+  const realId = await sbInsert(currentSchool, d);
+  if (realId) d.id = realId;
 
   drawings[currentSchool].unshift(d);
-
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(drawings)
-  );
   renderAdmin();
-  console.log(drawings);
 }
 
-function deleteDrawing(id) {
- drawings[currentSchool] =
-  (drawings[currentSchool] || []).filter(d => d.id !== id);
-
-localStorage.setItem(
-  STORAGE_KEY,
-  JSON.stringify(drawings)
-);
+async function deleteDrawing(id) {
+  await sbDelete(id);
+  drawings[currentSchool] = (drawings[currentSchool] || []).filter(d => d.id !== id);
   renderAdmin();
   showNotif('🗑️ Dessin supprimé.');
 }
