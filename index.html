@@ -18,7 +18,7 @@
       folder:       "mur-dessins",
     },
     supabase: {
-      url:    "https://nycrcqlyatxcpahworfi.supabase.co/rest/v1/drawings",   // ← ex: https://xxxx.supabase.co
+      url:    "https://nycrcqlyatxcpahworfi.supabase.co",
       anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55Y3JjcWx5YXR4Y3BhaHdvcmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTc2OTksImV4cCI6MjA5Nzc5MzY5OX0.62HnTnEzhBsVmIHXOqqOJj3vOsIuap8ILblwsGza42Y", // ← clé publique anon
       table:  "drawings",
     },
@@ -301,14 +301,7 @@ select.field-input { cursor: pointer; }
 /* ═══════════════════════════════════════
    ÉCRAN 3A — ADMIN ÉCOLE
 ═══════════════════════════════════════ */
-#s-admin { display: none; flex-direction: column; min-height: 100vh; }
-#s-admin.active { display: flex; }
-
-/* ═══════════════════════════════════════
-   ÉCRAN 3B — MUR VISITEUR
-═══════════════════════════════════════ */
-#s-visitor { display: none; flex-direction: column; min-height: 100vh; }
-#s-visitor.active { display: flex; }
+#s-admin, #s-visitor { flex-direction: column; min-height: 100vh; }
 
 /* ── HEADER COMMUN ── */
 .page-header {
@@ -616,7 +609,7 @@ select.field-input { cursor: pointer; }
 <!-- ═══════════════════════════════════════════
      ÉCRAN 3A — ESPACE ADMIN ÉCOLE
 ═══════════════════════════════════════════ -->
-<div id="s-admin">
+<div id="s-admin" class="screen">
   <div class="page-header">
     <div class="school-badge">
       <div class="dot" id="admin-dot"></div>
@@ -664,7 +657,7 @@ select.field-input { cursor: pointer; }
 <!-- ═══════════════════════════════════════════
      ÉCRAN 3B — VUE VISITEUR (lecture seule)
 ═══════════════════════════════════════════ -->
-<div id="s-visitor">
+<div id="s-visitor" class="screen">
   <div class="visitor-banner" id="visitor-banner">
     👀 Tu explores en mode visiteur — les dessins ne peuvent pas être modifiés.
   </div>
@@ -766,25 +759,17 @@ async function sbDelete(id) {
 /* ═══════════ NAVIGATION ═══════════ */
 function goto(screenId) {
   document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-  document.getElementById(screenId)?.classList.add('active');
-}
-
-function showPage(pageId) {
-  ['s-admin','s-visitor'].forEach(id => {
-    document.getElementById(id).classList.remove('active');
-  });
-  document.getElementById(pageId).classList.add('active');
+  if (screenId) document.getElementById(screenId)?.classList.add('active');
 }
 
 function logout() {
+  sessionStorage.removeItem('mur_session');
   currentSchool = selectedSchool = null;
   isAdmin = false; visitorPrenom = "";
   document.getElementById('admin-pwd').value = '';
   document.getElementById('admin-pwd-err').textContent = '';
   document.getElementById('visitor-name').value = '';
   document.getElementById('visitor-err').textContent = '';
-  ['s-admin','s-visitor'].forEach(id =>
-    document.getElementById(id).classList.remove('active'));
   goto('s-home');
 }
 
@@ -846,8 +831,8 @@ function adminLogin() {
   document.getElementById('admin-name').textContent = school.name;
   document.getElementById('s-admin').style.background = school.bg;
 
-  goto('');       // désactive les .screen
-  showPage('s-admin');
+  saveSession();
+  goto('s-admin');
   sbFetch(currentSchool).then(() => renderAdmin());
 }
 
@@ -879,8 +864,8 @@ function visitorLogin() {
   document.getElementById('visitor-banner').textContent =
     `👋 Bonjour ${name} ! Tu explores les dessins de ${school.name}.`;
 
-  goto('');
-  showPage('s-visitor');
+  saveSession();
+  goto('s-visitor');
   document.getElementById('visitor-grid').innerHTML =
     `<div class="empty-state"><span class="e-emoji">⏳</span><p>Chargement des dessins…</p></div>`;
   sbFetch(currentSchool).then(() => renderVisitor());
@@ -1044,6 +1029,47 @@ function showNotif(msg) {
 function todayStr() {
   return new Date().toLocaleDateString('fr-FR');
 }
+
+/* ═══════════ SESSION (survive le rechargement) ═══════════ */
+function saveSession() {
+  sessionStorage.setItem('mur_session', JSON.stringify({
+    currentSchool, isAdmin, visitorPrenom
+  }));
+}
+
+function restoreSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem('mur_session') || 'null');
+    if (!s || !s.currentSchool || !CONFIG.schools[s.currentSchool]) return;
+
+    currentSchool = s.currentSchool;
+    isAdmin       = s.isAdmin;
+    visitorPrenom = s.visitorPrenom || "";
+    const school  = CONFIG.schools[currentSchool];
+
+    if (isAdmin) {
+      document.getElementById('admin-dot').style.background  = school.color;
+      document.getElementById('admin-emoji').textContent     = school.emoji;
+      document.getElementById('admin-name').textContent      = school.name;
+      document.getElementById('s-admin').style.background    = school.bg;
+      goto('s-admin');
+      sbFetch(currentSchool).then(() => renderAdmin());
+    } else {
+      document.getElementById('visitor-dot').style.background       = school.color;
+      document.getElementById('visitor-emoji-badge').textContent    = school.emoji;
+      document.getElementById('visitor-name-badge').textContent     = school.name;
+      document.getElementById('s-visitor').style.background         = school.bg;
+      document.getElementById('visitor-banner').textContent =
+        `👋 Bonjour ${visitorPrenom} ! Tu explores les dessins de ${school.name}.`;
+      goto('s-visitor');
+      document.getElementById('visitor-grid').innerHTML =
+        `<div class="empty-state"><span class="e-emoji">⏳</span><p>Chargement des dessins…</p></div>`;
+      sbFetch(currentSchool).then(() => renderVisitor());
+    }
+  } catch(e) { /* pas de session, rien à faire */ }
+}
+
+restoreSession();
 </script>
 </body>
 </html>
